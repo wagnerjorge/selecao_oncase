@@ -1,0 +1,32 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+#Preparação das ferramentas e dos dados
+Inicialmente vamos instalar todos os pacotes necessários para as análises, mudar o diretório de trabalho e tratar os dados através de limpeza e criação de features.
+
+##Instalação dos pacotes necessários
+```{r}
+install.packages('jsonlite')
+
+```
+
+Uma vez que os pacotes foram instalados precisamos deixá-los disponíveis para o uso.
+
+```{r}
+library(jsonlite)
+```
+
+
+
+```{r}
+setwd("G:/Dropbox_Novo/Dropbox/selecao_oncase/selecao_oncase")
+data <- fromJSON(file = 'receitas.json')
+```
+
+
+```{r}
+receitas <- data.frame(data)
+```
+
