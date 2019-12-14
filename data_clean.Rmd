@@ -1,6 +1,8 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "Desafio Oncase - Receitas"
+output:
+  html_notebook: default
+  pdf_document: default
 ---
 
 #Preparação das ferramentas e dos dados
@@ -8,7 +10,7 @@ Inicialmente vamos instalar todos os pacotes necessários para as análises, mud
 
 ##Instalação dos pacotes necessários
 ```{r}
-install.packages('jsonlite')
+#install.packages('jsonlite')
 
 ```
 
@@ -16,17 +18,118 @@ Uma vez que os pacotes foram instalados precisamos deixá-los disponíveis para 
 
 ```{r}
 library(jsonlite)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(tibble)
 ```
 
-
+A leitura dos dados é feita pelo pacote jsonlite e transformado num `data.frame`. Dessa forma, cada coluna descreve uma variável.
 
 ```{r}
 setwd("G:/Dropbox_Novo/Dropbox/selecao_oncase/selecao_oncase")
-data <- fromJSON(file = 'receitas.json')
+receitas <- fromJSON('receitas.json')
+```
+
+INICIO LEMBRAR DE REMOVER
+```{r}
+set.seed(1)
+receitas <- receitas[sample(seq_along(receitas$fat), 2000, replace = FALSE), ]
+```
+FIM LEMBRAR  DE REMOVER
+
+# RETORMAR AQUI
+Para as variáveis contínuas nós calculamos as principais medidas resumo. No entando, é possível observar que há um valor extremamente fora do esperado para cada variável, este valor pode indicar algum erro de medição visto que a distância do terceiro quartil é muito grande, o que não configura um outlier.
+
+```{r}
+receitas %>% select(fat, calories, protein, sodium) %>% summary()
+```
+
+Criamos uma variabel `id` para identificar quantos indivíduos apresentam potencias erros de medição. A partir dela conseguimos identifica um indivíduo.
+
+```{r}
+receitas <- receitas %>% mutate(id = seq_along(fat))
+id_error <- receitas %>% select(fat, calories, protein, sodium) %>% apply(2, which.max)
+```
+
+Além do indivíduo `666` podemos observar outros valores estranhos nas variáveis contínuas, a saber: `fat, calories, protein` e `sodium`. Então, nós utilizamos como fonte a American Heart Association conhecida como [Heart](https://www.heart.org/en/healthy-living/healthy-eating/eat-smart/sodium/how-much-sodium-should-i-eat-per-day) para identificar a quantidade máxima recomendada de sódio por dia que está em torno de 2,300 (mg)
+
+
+Pelos gráficos de dispersão para `fat, calories, protein` e `sodium` nós rotulados usando a variável `id` os indivíduos que ultrapassam a média em três desvios-padrão, estes indivíduos possuem algum erro na medição. Uma abordagem comum é deletá-los, porém devido a preciosidade e custo de obtenção das amostras coletadas nós substituímos seus valores pela média sem estes (abordagem conhecida como imputação pela média).
+
+
+
+```{r}
+receitas[-id_error, ] %>% ggplot(aes(x = seq_along(fat) , y = fat)) + 
+  geom_point() + xlab('Index') +
+  geom_text(aes(label=ifelse(fat > 2 *sd(fat, na.rm = TRUE) ,
+                             as.character(id), '')), hjust=0, vjust=0)
+
+receitas[-id_error, ] %>% ggplot(aes(x = seq_along(calories) , y = calories)) + 
+  geom_point() + xlab('Index')+
+  geom_text(aes(label=ifelse(calories > 2 * sd(calories, na.rm = TRUE) ,
+                             as.character(id), '')), hjust=0, vjust=0)
+
+receitas[-id_error, ] %>% ggplot(aes(x = seq_along(protein) , y = protein)) + 
+  geom_point() + xlab('Index')+
+  geom_text(aes(label=ifelse(protein > 2 *sd(protein, na.rm = TRUE) ,
+                             as.character(id), '')), hjust=0, vjust=0)
+
+receitas[-id_error, ] %>% ggplot(aes(x = seq_along(sodium) , y = sodium)) + 
+  geom_point() + xlab('Index')+
+  geom_text(aes(label=ifelse(sodium > 2 *sd(sodium, na.rm = TRUE) ,
+                             as.character(id), '')), hjust=0, vjust=0)
 ```
 
 
 ```{r}
-receitas <- data.frame(data)
+receitas %>% mutate(fat, ifelse(is.na(fat), mean(fat, na.rm = TRUE), fat))
 ```
+
+
+# RETOMAR LA EM CIMA DEPOIS
+
+Acreditamos que a nota da receita está relacionada a dificuldade da mesma, pois receitas muito difíceis podem não concluída com sucesso e com isso ter sua nota diminuída. Então, elencamos algumas medidas para avaliar a dificuldade da receita, são elas: (1) número de processos (`num_process`); (2) cozida, assada, ou vai ao forno (`baked`); (3) número de caracteres (concisão) (`conciseness`); (4) preparation time (`time`).
+
+```{r}
+num_process <- sapply(receitas[[1]], function(x) length(x))
+baked <- str_detect(receitas$directions, '°F|°C|°K')
+conciseness <- str_length(receitas$directions)
+hour <- sapply(str_extract_all(receitas$directions, "\\d+(?=\\shour)"),
+               function(x) sum(as.numeric(x))) 
+minutes <- sapply(str_extract_all(receitas$directions, "\\d+(?=\\sminute)"),
+               function(x) sum(as.numeric(x)))
+time <- 24 * hour + minutes
+```
+
+Número de dias desde a publicação da receita pode ser um fator decisivo na nota da receita. Além disso, criamos uma variável que determina se uma "receita é clássica" ou não, elas são consideradas clássicas se tem mais de 10 anos (3650 dias). Através de uma variável dummy `old_recipe` sabemos se as receitas são clássicas ou não.
+
+```{r}
+date <- receitas %>% mutate(date, date1 = as.Date(date)) %>% select(date1)
+num_days <- as.numeric(Sys.Date() - date$date1)
+num_days[which(is.na(num_days))] <- mean(num_days, na.rm = TRUE)
+old_recipe <- as.factor(as.integer(num_days >= 3650))
+```
+
+Outra importante variável para a nota da receita são as categorias que ela está inserida.
+
+```{r}
+num_categories <- sapply(receitas$categories,
+                         function(x) length(x))
+
+cat <- sapply(receitas$categories, 
+              function(x) stringi::stri_trans_general(x, "Latin-ASCII")  )
+
+freq_cat <- factor(unlist(receitas$categories), 
+                         levels = unique(unlist(receitas$categories)))
+summary(freq_cat)
+```
+
+A descrição da receita funciona como um subtítulo da receita e pode ser um fator e engajamento a executar a receita. Dessa forma, pode ter influência sobre a avaliação da receita.
+
+```{r}
+
+```
+
 
