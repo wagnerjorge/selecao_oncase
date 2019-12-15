@@ -2,15 +2,23 @@
 title: "Desafio Oncase - Receitas"
 output:
   html_notebook: default
+  html_document:
+    df_print: paged
   pdf_document: default
 ---
 
-#Preparação das ferramentas e dos dados
+# Introdução
+
+askjdhajshdajskd
+
+## Preparação das ferramentas e dos dados
 Inicialmente vamos instalar todos os pacotes necessários para as análises, mudar o diretório de trabalho e tratar os dados através de limpeza e criação de features.
 
-##Instalação dos pacotes necessários
+## Instalação dos pacotes necessários
 ```{r}
 #install.packages('jsonlite')
+#install.packages('udpipe')
+#install.packages('textrank')
 
 ```
 
@@ -23,8 +31,12 @@ library(dplyr)
 library(ggplot2)
 library(stringr)
 library(tibble)
+library(udpipe)
+library(textrank)
+library(tm)
 ```
 
+## Leitura dos dados
 A leitura dos dados é feita pelo pacote jsonlite e transformado num `data.frame`. Dessa forma, cada coluna descreve uma variável.
 
 ```{r}
@@ -39,56 +51,82 @@ receitas <- receitas[sample(seq_along(receitas$fat), 2000, replace = FALSE), ]
 ```
 FIM LEMBRAR  DE REMOVER
 
-# RETORMAR AQUI
-Para as variáveis contínuas nós calculamos as principais medidas resumo. No entando, é possível observar que há um valor extremamente fora do esperado para cada variável, este valor pode indicar algum erro de medição visto que a distância do terceiro quartil é muito grande, o que não configura um outlier.
+# Análise descritiva preliminar
+
+Para as variáveis contínuas nós calculamos as principais medidas resumo. No entando, é possível observar que há um valor extremamente fora do esperado para cada variável, este valor pode indicar algum erro de medição visto que a distância do terceiro quartil é muito grande, o que não configura um outlier, mas um erro claro de medição.
 
 ```{r}
-receitas %>% select(fat, calories, protein, sodium) %>% summary()
+receitas %>% select(rating, fat, calories, protein, sodium) %>% summary()
 ```
 
-Criamos uma variabel `id` para identificar quantos indivíduos apresentam potencias erros de medição. A partir dela conseguimos identifica um indivíduo.
+Criamos uma variabel `id` para identificar qual indivíduo apresenta erro de medição. A partir dela conseguimos identifica um indivíduo altamente discrepante, o indivíduo `666`.
 
 ```{r}
 receitas <- receitas %>% mutate(id = seq_along(fat))
 id_error <- receitas %>% select(fat, calories, protein, sodium) %>% apply(2, which.max)
+id_error
 ```
 
-Além do indivíduo `666` podemos observar outros valores estranhos nas variáveis contínuas, a saber: `fat, calories, protein` e `sodium`. Então, nós utilizamos como fonte a American Heart Association conhecida como [Heart](https://www.heart.org/en/healthy-living/healthy-eating/eat-smart/sodium/how-much-sodium-should-i-eat-per-day) para identificar a quantidade máxima recomendada de sódio por dia que está em torno de 2,300 (mg)
+Além do indivíduo `666` podemos observar outros valores estranhos nas variáveis contínuas, a saber: `fat, calories, protein` e `sodium`. Estes valores tem deformado a distribuição de probabilidade conforme podemos observar nos boxplots abaixo.
+
+```{r}
+receitas[-id_error[1], ] %>% ggplot(aes(y = fat)) + geom_boxplot()
+receitas[-id_error[2], ] %>% ggplot(aes(y = calories)) + geom_boxplot()
+receitas[-id_error[3], ] %>% ggplot(aes(y = protein)) + geom_boxplot()
+receitas[-id_error[4], ] %>% ggplot(aes(y = sodium)) + geom_boxplot()
+```
 
 
-Pelos gráficos de dispersão para `fat, calories, protein` e `sodium` nós rotulados usando a variável `id` os indivíduos que ultrapassam a média em três desvios-padrão, estes indivíduos possuem algum erro na medição. Uma abordagem comum é deletá-los, porém devido a preciosidade e custo de obtenção das amostras coletadas nós substituímos seus valores pela média sem estes (abordagem conhecida como imputação pela média).
+## Imputação de dados
 
+Então, nós utilizamos fontes nutricionais externas para detectar estes valores discrepantes para cada variável descrita. Todas medidas consideram a média ingerida por uma pessoa por dia. Obviamente esta medida pode ser subestimada, pois dependende diretamente do tamanho da porção que serve cada receita e sobrestimada considerando que as métricas são diárias e não por refeição/receita. Dessa forma, supomos que há um equilíbrio nas métricas externas utilizadas. Além disso, se usarmos essa média estaremos excluindo os outliers da análise e isto pode diminuir a capacidade de generalização do modelo então, usaremos duas vezes a média recomendada. Em detalhes, são elas:
+
+* Total de gordura (`fat`) - Segundo a [Health](https://health.gov/dietaryguidelines/dga2000/document/choose.htm) a média de gordura para uma dieta diária de 2.800 calorias é de 93g. Baseado nessa informação trataremos 186g de gordura como limiar.
+
+* Calorias (`calories`) - Ainda de acordo com a [Health](https://health.gov/dietaryguidelines/2015/guidelines/appendix-2/) a média de calorias para um homem e uma mulher de um jovem é 2.800 e 2200 calorias, respectivamente. Devido a ausência do gênero como variável utilizaremos 5000 calorias como limiar.
+
+* Proteína (`protein`) - Em entrevista para o [NY Times](https://www.nytimes.com/2017/07/28/well/eat/how-much-protein-do-we-need.html) a autora do livro “Devoured: How What We Eat Defines Who We Are”, Sophie Egan afirma que em média um norte americano consome em média 100g de proteínas pode dia logo, o limiar adotado é 200g. 
+
+* Total de Sódio (`sodium`) - A American Heart Association conhecida como [Heart](https://www.heart.org/en/healthy-living/healthy-eating/eat-smart/sodium/how-much-sodium-should-i-eat-per-day) informam que os americanos consomem em média 3.400mg de sódio por dia assim, o valor limitante para definição de erro de medida ou não é 6.800mg.
+
+
+Em outras palavras, receitas que ultrapassem os limiares citados acima, nas suas respectivas variáveis, serão substituídas pela média truncada em 5%. São 21, 10, 18 e 12 receitas para `fat, calories, protein` e `sodium`, respectivamente,
 
 
 ```{r}
-receitas[-id_error, ] %>% ggplot(aes(x = seq_along(fat) , y = fat)) + 
-  geom_point() + xlab('Index') +
-  geom_text(aes(label=ifelse(fat > 2 *sd(fat, na.rm = TRUE) ,
-                             as.character(id), '')), hjust=0, vjust=0)
+sum(na.omit(receitas$fat) >= 186)
+sum(na.omit(receitas$calories) >= 5000)
+sum(na.omit(receitas$protein) >= 200)
+sum(na.omit(receitas$sodium) >= 6800)
 
-receitas[-id_error, ] %>% ggplot(aes(x = seq_along(calories) , y = calories)) + 
-  geom_point() + xlab('Index')+
-  geom_text(aes(label=ifelse(calories > 2 * sd(calories, na.rm = TRUE) ,
-                             as.character(id), '')), hjust=0, vjust=0)
+id_error_fat <- which(receitas$fat >= 186)
+id_error_calories <- which(receitas$calories >= 5000)
+id_error_protein <- which(receitas$protein >= 200)
+id_error_sodium <- which(receitas$sodium >= 6800)
 
-receitas[-id_error, ] %>% ggplot(aes(x = seq_along(protein) , y = protein)) + 
-  geom_point() + xlab('Index')+
-  geom_text(aes(label=ifelse(protein > 2 *sd(protein, na.rm = TRUE) ,
-                             as.character(id), '')), hjust=0, vjust=0)
-
-receitas[-id_error, ] %>% ggplot(aes(x = seq_along(sodium) , y = sodium)) + 
-  geom_point() + xlab('Index')+
-  geom_text(aes(label=ifelse(sodium > 2 *sd(sodium, na.rm = TRUE) ,
-                             as.character(id), '')), hjust=0, vjust=0)
 ```
-
 
 ```{r}
-receitas %>% mutate(fat, ifelse(is.na(fat), mean(fat, na.rm = TRUE), fat))
+fat_trim_mean <- mean(receitas$fat, na.rm = TRUE, trim = .05)
+calories_trim_mean <- mean(receitas$calories, na.rm = TRUE, trim = .05)
+protein_trim_mean <- mean(receitas$protein, na.rm = TRUE, trim = .05)
+sodium_trim_mean <- mean(receitas$sodium, na.rm = TRUE, trim = .05)
+
+fat <- ifelse(is.na(receitas$fat), fat_trim_mean, receitas$fat)
+calories <- ifelse(is.na(receitas$calories), fat_trim_mean, receitas$calories)
+protein <- ifelse(is.na(receitas$protein), fat_trim_mean, receitas$protein)
+sodium <- ifelse(is.na(receitas$sodium), fat_trim_mean, receitas$sodium)
+
+fat[id_error_fat] <- fat_trim_mean
+calories[id_error_calories] <- calories_trim_mean
+protein[id_error_protein] <- protein_trim_mean
+sodium[id_error_sodium] <- sodium_trim_mean
+
+
 ```
 
 
-# RETOMAR LA EM CIMA DEPOIS
+## Criação de novas features
 
 Acreditamos que a nota da receita está relacionada a dificuldade da mesma, pois receitas muito difíceis podem não concluída com sucesso e com isso ter sua nota diminuída. Então, elencamos algumas medidas para avaliar a dificuldade da receita, são elas: (1) número de processos (`num_process`); (2) cozida, assada, ou vai ao forno (`baked`); (3) número de caracteres (concisão) (`conciseness`); (4) preparation time (`time`).
 
@@ -109,14 +147,19 @@ Número de dias desde a publicação da receita pode ser um fator decisivo na no
 date <- receitas %>% mutate(date, date1 = as.Date(date)) %>% select(date1)
 num_days <- as.numeric(Sys.Date() - date$date1)
 num_days[which(is.na(num_days))] <- mean(num_days, na.rm = TRUE)
-old_recipe <- as.factor(as.integer(num_days >= 3650))
+old_recipe <- (num_days >= 3650) %>% as.integer() %>% as.factor()
 ```
 
-Outra importante variável para a nota da receita são as categorias que ela está inserida.
+Outra importante variável para a nota da receita são as categorias que ela está inserida. Nós calculamos e armazenamos o número de categorias em que uma receita está inserida (`num_categories`) e verificamos também se está é vegetariana ou não (`vegetarian`). Além disso, verificamos quais as categorias são mais frequentes nas receitas através da variável `freq_cat`
 
 ```{r}
 num_categories <- sapply(receitas$categories,
                          function(x) length(x))
+
+vegetarian <- receitas %>% 
+  select(categories) %>% 
+  sapply(function(x) str_detect(x, pattern = 'Vegetarian')) %>% 
+  as.integer() %>% as.factor()
 
 cat <- sapply(receitas$categories, 
               function(x) stringi::stri_trans_general(x, "Latin-ASCII")  )
@@ -124,12 +167,76 @@ cat <- sapply(receitas$categories,
 freq_cat <- factor(unlist(receitas$categories), 
                          levels = unique(unlist(receitas$categories)))
 summary(freq_cat)
+
+
 ```
 
-A descrição da receita funciona como um subtítulo da receita e pode ser um fator e engajamento a executar a receita. Dessa forma, pode ter influência sobre a avaliação da receita.
+A descrição da receita funciona como um subtítulo da receita e pode ser um fator e engajamento a executar a receita. Dessa forma, pode ter influência sobre a avaliação da receita. Portanto, três variáveis foram criadas, a primeira verifica se há descrição na receita, a segunda indica o número de orações de sentido completo na descrição e a terceira revela o número de caracteres na descrição. Elas são descritas pelas variáveis `desc`, `phrases` e `desc_char`, respectivamente.
 
 ```{r}
+desc <- receitas %>% select(desc) %>% is.na() %>% as.numeric()
+
+phrases <- receitas %>% 
+  select(desc) %>% 
+  apply(1, 
+        function(x) str_count(x, pattern = '\\.|\\:|\\?|\\!|\\;'))
+phrases <- ifelse(is.na(phrases), 0, phrases)
+
+desc_char <- receitas %>% select(desc) %>% apply(1,
+                                                function(x) str_length(x)) 
+desc_char <- ifelse(is.na(desc_char), 0, desc_char)
+```
+
+
+Estudando a variável ingredientes podemos detectar que algumas receitas não apresentam nenhum ingrediente assim, não foram consideradas receitas válidas e foram deletadas do banco de dados. A base de dados `receitas2` armazena a nova base de dados sem as receitas inválidas. Em seguida, contamos o número de ingredientes por receita.
+
+```{r}
+recipes_without_ingredients <- which(sapply(receitas$ingredients, length) == 0)
+recipes_without_ingredients
+receitas2 <- receitas[-recipes_without_ingredients, ]
+
+num_ingredients <- receitas2$ingredients %>% sapply(function(x) length(x))
+```
+
+
+```{r}
+drop_words <- c('cup', 'cups', 'teaspoon', 'teaspoons', 'tablespoons', 'tablespoon',
+                'peel', 'pound', 'ground', 'preserve', 'inch', 'piece', 'stick', 'slice',
+                'large', 'optional', 'ounce', 'leave', 'purpose', 'powder', 'broth',
+                'baking')
+
+
+
+ingredients <- receitas2$ingredients %>% 
+  lapply(function(x) removeWords(x, drop_words)) %>% 
+  lapply(function(x) removeWords(x, stopwords('english'))) %>% 
+  lapply(function(x) str_replace_all(x, '[^[:alnum:]]', ' ')) %>% 
+  lapply(function(x) removeNumbers(x)) %>% 
+  lapply(function(x) stripWhitespace(x))
+
+
+#Dowload deve ser feito uma única vez
+#ud_model <- udpipe_download_model(language = "english")
+ud_model <- udpipe_load_model(ud_model$file_model)
+
+x <- udpipe_annotate(ud_model, x = unlist(ingredients))
+x <- as.data.frame(x)
+
+stats <- subset(x, upos %in% "NOUN")
+stats <- txt_freq(x = stats$lemma)
+library(lattice)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+barchart(key ~ freq, data = head(stats, 30), 
+         col = "cadetblue", main = "Most occurring nouns", xlab = "Freq")
 
 ```
 
+
+# Análise descritiva complementar
+
+Através das variáveis contínuas e das criadas neste estudo (features) montamos um novo dataset denominado de  `recipes3`.
+
+```{r}
+recipes3 <- sdasdasdasd
+```
 
