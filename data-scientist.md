@@ -38,7 +38,7 @@ Conta ponto também:
 2. Quais os top 10 ingredientes contidos nas receitas mais calóricas? OK
 3. Se você tivesse que recomendar 3 receitas baseando-se nos dados, quais seriam? Ok
 4. Alguma característica presente nos dados determina a alta nota de uma receita? Ok
-5. Considerando-se as categorias das top 100 receitas em avaliação, quantas receitas há atualmente no site https://www.epicurious.com para cada categoria
+5. Considerando-se as categorias das top 100 receitas em avaliação, quantas receitas há atualmente no site https://www.epicurious.com para cada categoria Ok
 6. [opcional] Construa um classificador para recomendar tags (categorias) para as receitas;
 
 Sample:
