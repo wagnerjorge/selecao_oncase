@@ -1,7 +1,11 @@
 # Desafio Oncase - Receitas
+
 author: Wagner J.F. Silva
+
 affiliation: Centro de Informática - UFPE
+
 tags: cientista de dados, extração de conhecimento, receitas, epicurious
+
 abstract: Estatístico, mestre e doutorando em Ciência da Computação apaixonado por ciência de dados e entusiasta no uso e criação de modelos/algoritmos whitebox para extração e mineração de conhecimento a partir de dados diversos. Debruçado, até o final de sete dias, sobre o estudo da base de dados de receitas com objetivo de entender suas peculiaridades e pepitas escondidas como forma de expor parte do conhecimento obtido na academia para a Oncase.
 
 # O problema
