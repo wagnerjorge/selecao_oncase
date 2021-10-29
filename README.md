@@ -446,9 +446,9 @@ Esta solução não é definitiva podendo assim, ser aprimorada em tempo oportun
 
 * O crawler que verifica a existência de uma receita no site epicurious é um protótipo, podendo ser melhorado;
 
-* A sexta questão pode ser resolvia através de sistemas de recomendação, por exemplo, cgontent-based filtering. Porém há limitações técnicas e teóricas, temporárias, que impossibilitam a solução do problema no tempo estabelecido;
+* A sexta questão pode ser resolvida através de sistemas de recomendação, por exemplo, content-based filtering. Porém há limitações técnicas e teóricas, temporárias, que impossibilitam a solução do problema no tempo estabelecido;
 
-* Feedback - A variável `rating` de modo purista deve ser analisado por um modelo estatístico cuja distribuição de probabilidade tenha suporte no intervalo [0, 5], ou seja, modelos dessa natureza garantem matematicamente que as predições e previsões não estaram fora do domínio da variável. Portanto, a detecção de fatores importantes que influenciam na nota de uma receita pode ser feita através de modelos desta natureza. Contudo, a carga teórica para apredizagem de modelos deste tipo pode durar de uma semana a um mês. Uma possível solução para isto é perder um pouco de informação binarizando (tornando dummy) a variável em estudo com isso, podemos aplicar um modelo de regressão logística ou árvore de decisão para extração de regras. Sendo o último a abordagem utilizada.
+* Feedback - A variável `rating` de modo purista deve ser analisado por um modelo estatístico cuja distribuição de probabilidade tenha suporte no intervalo [0, 5], ou seja, modelos dessa natureza garantem matematicamente que as predições e previsões não estarão fora do domínio da variável. Portanto, a detecção de fatores importantes que influenciam na nota de uma receita pode ser feita através de modelos desta natureza. Contudo, a carga teórica para apredizagem de modelos deste tipo pode durar de uma semana a um mês. Uma possível solução para isto é perder um pouco de informação binarizando (tornando dummy) a variável em estudo. Com isso, podemos aplicar um modelo de regressão logística ou árvore de decisão para extração de regras. Sendo o último a abordagem utilizada.
 
 Por fim, abaixo temos o tempo para solução de todas as questões obrigatórias.
 ```{r}
